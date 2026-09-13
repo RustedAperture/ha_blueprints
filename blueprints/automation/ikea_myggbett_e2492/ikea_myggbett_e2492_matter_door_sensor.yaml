@@ -3,6 +3,7 @@ blueprint:
   description: |
     Full-featured automation for the IKEA MYGGBETT E2492 Matter door/window sensor.
     Supports immediate and delayed actions for both opened and closed states, battery alerts, and an optional timed action when opened.
+    Original blueprint by [aledziko](https://github.com/aledziko), from [aledziko/HA-blueprints](https://github.com/aledziko/HA-blueprints/blob/main/IKEA/Matter/ikea-myggbett-e2492/ikea-myggbett-e2492-matter-door-sensor.yaml).
     Timed open action support added by [@RustedAperture](https://github.com/RustedAperture).
   domain: automation
   source_url: https://github.com/RustedAperture/ha_blueprints/blob/main/blueprints/automation/ikea_myggbett_e2492/ikea_myggbett_e2492_matter_door_sensor.yaml

@@ -8,6 +8,7 @@ blueprint:
     Allows to optionally loop an action on a button long press.
     Allows for Virtual Double Presses. Needs to be enabled in blueprint.
     Supports Zigbee2MQTT, ZHA, deCONZ, Matter.
+    Original blueprint by [EPMatt](https://github.com/EPMatt), from the [Awesome HA Blueprints project](https://github.com/EPMatt/awesome-ha-blueprints/blob/main/blueprints/controllers/ikea_e2201/ikea_e2201.yaml).
     Matter support added by [@RustedAperture](https://github.com/RustedAperture).
 
     Automations created with this blueprint can be connected with one or more [Hooks](https://epmatt.github.io/awesome-ha-blueprints/docs/blueprints/hooks) supported by this controller.
