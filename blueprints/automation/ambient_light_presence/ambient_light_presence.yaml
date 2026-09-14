@@ -1,0 +1,212 @@
+blueprint:
+  name: Ambient Light & Presence Lighting
+  description: |
+    Turn a monitored light on when it is dark, someone is home, and the configured awake window is active.
+    Turn it off after the ambient sensor remains bright for the configured hold time. Actions are generic Home Assistant action sequences,
+    and no helper entities are required. Arrival, awake-start, and Home Assistant startup checks recover missed darkness crossings.
+    Threshold separation provides hysteresis and prevents rapid cycling; hold times reset when the automation is reloaded or Home Assistant restarts.
+    Manually turning the monitored light off does not trigger this automation, so manual control is respected until another qualifying event occurs.
+    Ashley's Light Fader can be selected as an optional action; its off action can fade fully off with endBrightnessPercent: 0.
+  domain: automation
+  author: RustedAperture
+  source_url: https://github.com/RustedAperture/ha_blueprints/blob/main/blueprints/automation/ambient_light_presence/ambient_light_presence.yaml
+  homeassistant:
+    min_version: 2024.10.0
+  input:
+    ambient_sensor:
+      name: Ambient Light Sensor
+      description: Select the numeric ambient-light sensor to monitor.
+      selector:
+        entity:
+          filter:
+            domain: sensor
+
+    higher_values_mean_darker:
+      name: Higher Values Mean Darker
+      description: Enable when the sensor value increases as the environment gets darker; disable when it decreases.
+      default: true
+      selector:
+        boolean: {}
+
+    dark_threshold:
+      name: Dark Threshold
+      description: Sensor value beyond which the environment is considered dark. Keep this farther toward the sensor's dark end than the bright threshold to provide hysteresis.
+      default: 2800
+      selector:
+        number:
+          mode: box
+          min: -100000
+          max: 100000
+          step: 1
+
+    bright_threshold:
+      name: Bright Threshold
+      description: Sensor value beyond which the environment is considered bright. Keep this separated from the dark threshold to provide hysteresis.
+      default: 500
+      selector:
+        number:
+          mode: box
+          min: -100000
+          max: 100000
+          step: 1
+
+    dark_hold_time:
+      name: Dark Hold Time
+      description: How long the sensor must remain dark before a turn-on evaluation.
+      default:
+        hours: 0
+        minutes: 5
+        seconds: 0
+      selector:
+        duration: {}
+
+    bright_hold_time:
+      name: Bright Hold Time
+      description: How long the sensor must remain bright before the turn-off action.
+      default:
+        hours: 0
+        minutes: 5
+        seconds: 0
+      selector:
+        duration: {}
+
+    people:
+      name: People
+      description: Select one or more people; at least one must be home for the turn-on action.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            domain: person
+
+    awake_start_time:
+      name: Awake Start Time
+      description: Start of the time window in which the turn-on action may run. Arrival, awake-start, and startup evaluations recover missed crossings.
+      default: '07:00:00'
+      selector:
+        time: {}
+
+    awake_end_time:
+      name: Awake End Time
+      description: End of the time window in which the turn-on action may run. The end time does not trigger the automation or turn the light off.
+      default: '23:00:00'
+      selector:
+        time: {}
+
+    monitored_light:
+      name: Monitored Light
+      description: Select the light or light group whose current state prevents duplicate turn-on or turn-off actions. Manually turning it off does not trigger this automation.
+      selector:
+        entity:
+          filter:
+            domain: light
+
+    turn_on_action:
+      name: Turn-On Action
+      description: Generic Home Assistant actions to run when darkness, presence, awake time, and an off monitored light all pass. Ashley's Light Fader can fade on, for example, to 50 percent over 30 minutes.
+      default: []
+      selector:
+        action: {}
+
+    turn_off_action:
+      name: Turn-Off Action
+      description: >-
+        Generic Home Assistant actions to run when brightness is sustained and the monitored light is on. Ashley's Light Fader can fade fully off with endBrightnessPercent: 0.
+      default: []
+      selector:
+        action: {}
+
+trigger_variables:
+  ambient_sensor_trigger: !input ambient_sensor
+  higher_values_mean_darker_trigger: !input higher_values_mean_darker
+  dark_threshold_trigger: !input dark_threshold
+  bright_threshold_trigger: !input bright_threshold
+
+triggers:
+  - trigger: template
+    id: dark_held
+    value_template: >-
+      {% set reading = states(ambient_sensor_trigger) %}
+      {% if not (reading | is_number) %}
+        false
+      {% elif higher_values_mean_darker_trigger %}
+        {{ (reading | float) > (dark_threshold_trigger | float) }}
+      {% else %}
+        {{ (reading | float) < (dark_threshold_trigger | float) }}
+      {% endif %}
+    for: !input dark_hold_time
+  - trigger: template
+    id: bright_held
+    value_template: >-
+      {% set reading = states(ambient_sensor_trigger) %}
+      {% if not (reading | is_number) %}
+        false
+      {% elif higher_values_mean_darker_trigger %}
+        {{ (reading | float) < (bright_threshold_trigger | float) }}
+      {% else %}
+        {{ (reading | float) > (bright_threshold_trigger | float) }}
+      {% endif %}
+    for: !input bright_hold_time
+  - trigger: state
+    id: person_arrived
+    entity_id: !input people
+    to: home
+  - trigger: time
+    id: awake_start
+    at: !input awake_start_time
+  - trigger: homeassistant
+    id: home_assistant_started
+    event: start
+
+variables:
+  ambient_sensor_entity: !input ambient_sensor
+  higher_values_mean_darker_entity: !input higher_values_mean_darker
+  dark_threshold_entity: !input dark_threshold
+  people_entities: !input people
+
+actions:
+  - if:
+      - condition: trigger
+        id: home_assistant_started
+    then:
+      - delay: '00:00:30'
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - dark_held
+              - person_arrived
+              - awake_start
+              - home_assistant_started
+          - condition: template
+            value_template: >-
+              {% set reading = states(ambient_sensor_entity) %}
+              {% if not (reading | is_number) %}
+                false
+              {% elif higher_values_mean_darker_entity %}
+                {{ (reading | float) > (dark_threshold_entity | float) }}
+              {% else %}
+                {{ (reading | float) < (dark_threshold_entity | float) }}
+              {% endif %}
+          - condition: template
+            value_template: >-
+              {{ expand(people_entities) | selectattr('state', 'eq', 'home') | list | count > 0 }}
+          - condition: time
+            after: !input awake_start_time
+            before: !input awake_end_time
+          - condition: state
+            entity_id: !input monitored_light
+            state: 'off'
+        sequence: !input turn_on_action
+      - conditions:
+          - condition: trigger
+            id:
+              - bright_held
+          - condition: state
+            entity_id: !input monitored_light
+            state: 'on'
+        sequence: !input turn_off_action
+
+mode: parallel
+max: 10
+max_exceeded: warning
