@@ -6,6 +6,7 @@ blueprint:
     and no helper entities are required. Arrival, awake-start, and Home Assistant startup checks recover missed darkness crossings.
     Threshold separation provides hysteresis and prevents rapid cycling; hold times reset when the automation is reloaded or Home Assistant restarts.
     Manually turning the monitored light off does not trigger this automation, so manual control is respected until another qualifying event occurs.
+    Because this automation runs in parallel, choose long-running on/off actions that safely coexist or cancel their opposite action when appropriate.
     Ashley's Light Fader can be selected as an optional action; its off action can fade fully off with endBrightnessPercent: 0.
   domain: automation
   author: RustedAperture
