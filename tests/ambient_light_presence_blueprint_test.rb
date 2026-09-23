@@ -59,7 +59,7 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
   end
 
   def test_inputs_and_defaults
-    assert_equal %w[ambient_sensor higher_values_mean_darker dark_threshold bright_threshold dark_hold_time bright_hold_time people awake_start_time awake_end_time monitored_light turn_on_action turn_off_action], inputs.keys
+    assert_equal %w[ambient_sensor higher_values_mean_darker dark_threshold bright_threshold dark_hold_time bright_hold_time people awake_start_time awake_end_time monitored_light turn_on_action use_arrival_turn_on_action arrival_turn_on_action turn_off_action], inputs.keys
     assert_equal true, inputs.dig("higher_values_mean_darker", "default")
     assert_equal 2800, inputs.dig("dark_threshold", "default")
     assert_equal 500, inputs.dig("bright_threshold", "default")
@@ -72,6 +72,10 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
     assert_equal "person", inputs.dig("people", "selector", "entity", "filter", "domain")
     assert_equal "light", inputs.dig("monitored_light", "selector", "entity", "filter", "domain")
     assert_equal({}, inputs.dig("turn_on_action", "selector", "action"))
+    assert_equal false, inputs.dig("use_arrival_turn_on_action", "default")
+    assert_equal({}, inputs.dig("use_arrival_turn_on_action", "selector", "boolean"))
+    assert_equal [], inputs.dig("arrival_turn_on_action", "default")
+    assert_equal({}, inputs.dig("arrival_turn_on_action", "selector", "action"))
     assert_equal({}, inputs.dig("turn_off_action", "selector", "action"))
   end
 
@@ -88,11 +92,13 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
       "awake_end_time" => 1,
       "monitored_light" => 2,
       "turn_on_action" => 1,
+      "use_arrival_turn_on_action" => 1,
+      "arrival_turn_on_action" => 1,
       "turn_off_action" => 1
     }
     counts = input_references.each_with_object(Hash.new(0)) { |name, result| result[name] += 1 }
     assert_equal expected, counts
-    assert_equal %w[ambient_sensor higher_values_mean_darker dark_threshold bright_threshold dark_hold_time bright_hold_time people awake_start_time ambient_sensor higher_values_mean_darker dark_threshold people awake_start_time awake_end_time monitored_light turn_on_action monitored_light turn_off_action], input_references
+    assert_equal %w[ambient_sensor higher_values_mean_darker dark_threshold bright_threshold dark_hold_time bright_hold_time people awake_start_time ambient_sensor higher_values_mean_darker dark_threshold people use_arrival_turn_on_action awake_start_time awake_end_time monitored_light arrival_turn_on_action turn_on_action monitored_light turn_off_action], input_references
     refute_match(/helper|counter|timer|input_text|input_boolean/, structural_strings(doc).join(" "))
   end
 
@@ -158,7 +164,15 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
     assert_equal({ "condition" => "template", "value_template" => "{{ expand(people_entities) | selectattr('state', 'eq', 'home') | list | count > 0 }}" }, on_conditions.fetch(2))
     assert_equal({ "condition" => "time", "after" => "awake_start_time", "before" => "awake_end_time" }, on_conditions.fetch(3))
     assert_equal({ "condition" => "state", "entity_id" => "monitored_light", "state" => "off" }, on_conditions.fetch(4))
-    assert_equal "turn_on_action", on_choice.fetch("sequence")
+    assert_kind_of Array, on_choice.fetch("sequence")
+    arrival_routing = on_choice.fetch("sequence").fetch(0)
+    arrival_choice = arrival_routing.fetch("choose").fetch(0)
+    assert_equal({ "condition" => "trigger", "id" => "person_arrived" }, arrival_choice.fetch("conditions").fetch(0))
+    assert_equal({ "condition" => "template", "value_template" => "{{ use_arrival_turn_on_action_input }}" }, arrival_choice.fetch("conditions").fetch(1))
+    assert_equal "arrival_turn_on_action", arrival_choice.fetch("sequence")
+    assert_equal "turn_on_action", arrival_routing.fetch("default")
+    assert_equal "use_arrival_turn_on_action", doc.fetch("variables").fetch("use_arrival_turn_on_action_input")
+    refute_includes doc.fetch("variables").values, "arrival_turn_on_action"
 
     off_conditions = off_choice.fetch("conditions")
     assert_equal 2, off_conditions.length

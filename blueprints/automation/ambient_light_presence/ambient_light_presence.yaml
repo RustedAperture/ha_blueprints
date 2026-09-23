@@ -4,6 +4,7 @@ blueprint:
     Turn a monitored light on when it is dark, someone is home, and the configured awake window is active.
     Turn it off after the ambient sensor remains bright for the configured hold time. Actions are generic Home Assistant action sequences,
     and no helper entities are required. Arrival, awake-start, and Home Assistant startup checks recover missed darkness crossings.
+    An optional arrival turn-on action can bring lights on quickly; enable it to use it instead of the regular turn-on action when someone arrives home.
     Threshold separation provides hysteresis and prevents rapid cycling; hold times reset when the automation is reloaded or Home Assistant restarts.
     Manually turning the monitored light off does not trigger this automation, so manual control is respected until another qualifying event occurs.
     Because this automation runs in parallel, choose long-running on/off actions that safely coexist or cancel their opposite action when appropriate.
@@ -104,7 +105,21 @@ blueprint:
 
     turn_on_action:
       name: Turn-On Action
-      description: Generic Home Assistant actions to run when darkness, presence, awake time, and an off monitored light all pass. Ashley's Light Fader can fade on, for example, to 50 percent over 30 minutes.
+      description: Generic actions to run when darkness, presence, awake time, and an off monitored light all pass. Also used on arrival unless the separate arrival action is enabled. Ashley's Light Fader can fade on, for example, to 50 percent over 30 minutes.
+      default: []
+      selector:
+        action: {}
+
+    use_arrival_turn_on_action:
+      name: Use Arrival Turn-On Action?
+      description: Enable to use the separate action when someone arrives home. Configure that action before enabling; an empty action does nothing. Existing automations keep using Turn-On Action until this is enabled.
+      default: false
+      selector:
+        boolean: {}
+
+    arrival_turn_on_action:
+      name: Arrival Turn-On Action
+      description: Actions to run when a selected person arrives home and the usual turn-on checks pass, if enabled above. For a quick arrival, use a short fade or an immediate light.turn_on action. Leave the toggle off to use Turn-On Action instead.
       default: []
       selector:
         action: {}
@@ -164,6 +179,7 @@ variables:
   higher_values_mean_darker_entity: !input higher_values_mean_darker
   dark_threshold_entity: !input dark_threshold
   people_entities: !input people
+  use_arrival_turn_on_action_input: !input use_arrival_turn_on_action
 
 actions:
   - if:
@@ -198,7 +214,15 @@ actions:
           - condition: state
             entity_id: !input monitored_light
             state: 'off'
-        sequence: !input turn_on_action
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: trigger
+                    id: person_arrived
+                  - condition: template
+                    value_template: '{{ use_arrival_turn_on_action_input }}'
+                sequence: !input arrival_turn_on_action
+            default: !input turn_on_action
       - conditions:
           - condition: trigger
             id:
