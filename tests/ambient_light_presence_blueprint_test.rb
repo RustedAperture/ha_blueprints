@@ -81,12 +81,12 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
 
   def test_all_input_references_are_tagged
     expected = {
-      "ambient_sensor" => 2,
+      "ambient_sensor" => 5,
       "higher_values_mean_darker" => 2,
-      "dark_threshold" => 2,
-      "bright_threshold" => 1,
-      "dark_hold_time" => 1,
-      "bright_hold_time" => 1,
+      "dark_threshold" => 3,
+      "bright_threshold" => 2,
+      "dark_hold_time" => 2,
+      "bright_hold_time" => 2,
       "people" => 2,
       "awake_start_time" => 2,
       "awake_end_time" => 1,
@@ -98,44 +98,27 @@ class AmbientLightPresenceBlueprintTest < Minitest::Test
     }
     counts = input_references.each_with_object(Hash.new(0)) { |name, result| result[name] += 1 }
     assert_equal expected, counts
-    assert_equal %w[ambient_sensor higher_values_mean_darker dark_threshold bright_threshold dark_hold_time bright_hold_time people awake_start_time ambient_sensor higher_values_mean_darker dark_threshold people use_arrival_turn_on_action awake_start_time awake_end_time monitored_light arrival_turn_on_action turn_on_action monitored_light turn_off_action], input_references
     refute_match(/helper|counter|timer|input_text|input_boolean/, structural_strings(doc).join(" "))
   end
 
-  def test_triggers_and_exact_direction_templates
-    assert_equal %w[dark_held bright_held person_arrived awake_start home_assistant_started], triggers.map { |item| item.fetch("id") }
-    dark = triggers.fetch(0)
-    bright = triggers.fetch(1)
-    assert_equal "template", dark.fetch("trigger")
-    assert_equal "dark_hold_time", dark.fetch("for")
-    assert_template_equal <<~TEMPLATE, dark.fetch("value_template")
-      {% set reading = states(ambient_sensor_trigger) %}
-      {% if not (reading | is_number) %}
-        false
-      {% elif higher_values_mean_darker_trigger %}
-        {{ (reading | float) > (dark_threshold_trigger | float) }}
-      {% else %}
-        {{ (reading | float) < (dark_threshold_trigger | float) }}
-      {% endif %}
-    TEMPLATE
-    assert_equal "template", bright.fetch("trigger")
-    assert_equal "bright_hold_time", bright.fetch("for")
-    assert_template_equal <<~TEMPLATE, bright.fetch("value_template")
-      {% set reading = states(ambient_sensor_trigger) %}
-      {% if not (reading | is_number) %}
-        false
-      {% elif higher_values_mean_darker_trigger %}
-        {{ (reading | float) < (bright_threshold_trigger | float) }}
-      {% else %}
-        {{ (reading | float) > (bright_threshold_trigger | float) }}
-      {% endif %}
-    TEMPLATE
-    assert_equal "state", triggers.fetch(2).fetch("trigger")
-    assert_equal "people", triggers.fetch(2).fetch("entity_id")
-    assert_equal "home", triggers.fetch(2).fetch("to")
-    refute triggers.fetch(2).key?("for")
-    assert_equal({ "trigger" => "time", "id" => "awake_start", "at" => "awake_start_time" }, triggers.fetch(3))
-    assert_equal({ "trigger" => "homeassistant", "id" => "home_assistant_started", "event" => "start" }, triggers.fetch(4))
+  def test_numeric_threshold_triggers_watch_the_sensor_in_both_directions
+    assert_equal %w[dark_held dark_held bright_held bright_held person_arrived awake_start home_assistant_started], triggers.map { |item| item.fetch("id") }
+    assert_equal "higher_values_mean_darker", doc.fetch("trigger_variables").fetch("higher_values_mean_darker_trigger")
+    expected = [
+      ["dark_held", "above", "dark_threshold", "dark_hold_time", "{{ higher_values_mean_darker_trigger }}"],
+      ["dark_held", "below", "dark_threshold", "dark_hold_time", "{{ not higher_values_mean_darker_trigger }}"],
+      ["bright_held", "below", "bright_threshold", "bright_hold_time", "{{ higher_values_mean_darker_trigger }}"],
+      ["bright_held", "above", "bright_threshold", "bright_hold_time", "{{ not higher_values_mean_darker_trigger }}"]
+    ]
+    expected.each_with_index do |(id, direction, threshold, hold, enabled), index|
+      assert_equal({ "trigger" => "numeric_state", "id" => id, "entity_id" => "ambient_sensor", direction => threshold, "for" => hold, "enabled" => enabled }, triggers.fetch(index))
+    end
+    assert_equal "state", triggers.fetch(4).fetch("trigger")
+    assert_equal "people", triggers.fetch(4).fetch("entity_id")
+    assert_equal "home", triggers.fetch(4).fetch("to")
+    refute triggers.fetch(4).key?("for")
+    assert_equal({ "trigger" => "time", "id" => "awake_start", "at" => "awake_start_time" }, triggers.fetch(5))
+    assert_equal({ "trigger" => "homeassistant", "id" => "home_assistant_started", "event" => "start" }, triggers.fetch(6))
   end
 
   def test_action_routing_and_guards

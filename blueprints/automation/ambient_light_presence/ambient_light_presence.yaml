@@ -133,36 +133,33 @@ blueprint:
         action: {}
 
 trigger_variables:
-  ambient_sensor_trigger: !input ambient_sensor
   higher_values_mean_darker_trigger: !input higher_values_mean_darker
-  dark_threshold_trigger: !input dark_threshold
-  bright_threshold_trigger: !input bright_threshold
 
 triggers:
-  - trigger: template
+  - trigger: numeric_state
     id: dark_held
-    value_template: >-
-      {% set reading = states(ambient_sensor_trigger) %}
-      {% if not (reading | is_number) %}
-        false
-      {% elif higher_values_mean_darker_trigger %}
-        {{ (reading | float) > (dark_threshold_trigger | float) }}
-      {% else %}
-        {{ (reading | float) < (dark_threshold_trigger | float) }}
-      {% endif %}
+    entity_id: !input ambient_sensor
+    above: !input dark_threshold
     for: !input dark_hold_time
-  - trigger: template
+    enabled: '{{ higher_values_mean_darker_trigger }}'
+  - trigger: numeric_state
+    id: dark_held
+    entity_id: !input ambient_sensor
+    below: !input dark_threshold
+    for: !input dark_hold_time
+    enabled: '{{ not higher_values_mean_darker_trigger }}'
+  - trigger: numeric_state
     id: bright_held
-    value_template: >-
-      {% set reading = states(ambient_sensor_trigger) %}
-      {% if not (reading | is_number) %}
-        false
-      {% elif higher_values_mean_darker_trigger %}
-        {{ (reading | float) < (bright_threshold_trigger | float) }}
-      {% else %}
-        {{ (reading | float) > (bright_threshold_trigger | float) }}
-      {% endif %}
+    entity_id: !input ambient_sensor
+    below: !input bright_threshold
     for: !input bright_hold_time
+    enabled: '{{ higher_values_mean_darker_trigger }}'
+  - trigger: numeric_state
+    id: bright_held
+    entity_id: !input ambient_sensor
+    above: !input bright_threshold
+    for: !input bright_hold_time
+    enabled: '{{ not higher_values_mean_darker_trigger }}'
   - trigger: state
     id: person_arrived
     entity_id: !input people
